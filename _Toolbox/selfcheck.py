@@ -88,6 +88,9 @@ def check_index():
 def check_history():
     print('\n[2] 归档历史 ↔ 实际项目')
     out_dir = ROOT / '输出结果'
+    if not (out_dir / 'HISTORY.md').is_file():
+        warn('输出结果/HISTORY.md 不存在（首次使用需按安装说明初始化）')
+        return
     text = read(out_dir / 'HISTORY.md')
     registered = []
     for line in text.splitlines():
@@ -112,7 +115,7 @@ def check_refs():
     print('\n[3] AGENTS.md 引用的文件')
     text = read(ROOT / 'AGENTS.md')
     names = set(re.findall(r'[\w\-]+\.(?:md|py|cmd|csv)', text))
-    names = {n for n in names if n not in ('AGENTS.md', 'README.md', 'INDEX.md', 'HISTORY.md')}
+    names = {n for n in names if n not in ('AGENTS.md', 'README.md', 'INDEX.md', 'HISTORY.md', '候选.md')}
     if not names:
         warn('AGENTS.md 里没找到可检查的文件引用')
         return
@@ -127,8 +130,14 @@ def check_refs():
 
 def check_help():
     print('\n[4] 工具入口可运行')
-    scripts = [p for p in TOOLBOX.rglob('*.py')
-               if p.name not in ('selfcheck.py',) and '测试' not in str(p) and '规则' not in str(p)]
+    scripts = []
+    for p in TOOLBOX.rglob('*.py'):
+        rel = p.relative_to(TOOLBOX).as_posix()
+        if p.name == 'selfcheck.py':            # 不检查自己
+            continue
+        if '测试/' in rel or rel.startswith('规则/') or '/规则/' in rel:
+            continue
+        scripts.append(p)
     if not scripts:
         warn('没有找到可检查的 .py')
         return
@@ -186,25 +195,33 @@ def check_root():
             warn(f'根目录有不该放的文件: {item.name}')
 
 
+# 数据层/自留文件：不在仓库里，不能进框架清单
+LOCAL_ONLY = {'变更日志.md', '词库.csv', '10-精确.json', '观察区.md'}
+
+
 def framework_files():
-    """框架文件 = 根目录规则文档 + _Toolbox 全部（清单自身除外）"""
+    """框架文件 = 根目录规则文档 + _Toolbox 全部，排除清单自身与数据层"""
     items = []
     for name in ('AGENTS.md', 'README.md'):
         p = ROOT / name
         if p.is_file():
             items.append(p)
     for p in TOOLBOX.rglob('*'):
-        if p.is_file() and p != MANIFEST:
-            items.append(p)
+        if not p.is_file() or p == MANIFEST:
+            continue
+        if p.name in LOCAL_ONLY:
+            continue
+        items.append(p)
     return items
 
 
 def file_hash(p: Path) -> str:
-    h = hashlib.sha256()
-    with p.open('rb') as f:
-        for chunk in iter(lambda: f.read(65536), b''):
-            h.update(chunk)
-    return h.hexdigest()
+    """按规范化内容算哈希：换行统一成 LF。
+
+    否则本机 CRLF、仓库 LF 会造成同内容不同哈希，接收端全报不一致。
+    """
+    data = p.read_bytes().replace(b'\r\n', b'\n')
+    return hashlib.sha256(data).hexdigest()
 
 
 def check_integrity(update: bool):
