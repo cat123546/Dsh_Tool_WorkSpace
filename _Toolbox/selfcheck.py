@@ -207,10 +207,23 @@ def framework_files():
         p = ROOT / name
         if p.is_file():
             items.append(p)
+    # 有 git 时只收 git 跟踪的文件，避免把用户本地新增文件（requirements.txt 等）纳入清单
+    tracked = None
+    if (ROOT / '.git').exists():
+        try:
+            r = subprocess.run(['git', 'ls-files'], cwd=str(ROOT),
+                               capture_output=True, timeout=10)
+            if r.returncode == 0:
+                tracked = {ln for ln in r.stdout.decode('utf-8', 'replace').splitlines() if ln}
+        except (OSError, subprocess.TimeoutExpired):
+            tracked = None
     for p in TOOLBOX.rglob('*'):
         if not p.is_file() or p == MANIFEST:
             continue
         if p.name in LOCAL_ONLY:
+            continue
+        rel = str(p.relative_to(ROOT)).replace('\\', '/')
+        if tracked is not None and rel not in tracked:
             continue
         items.append(p)
     return items

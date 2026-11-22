@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """评测：按类别统计召回率与误报率（只输出指标，不输出原文）"""
 import calendar
 import json
@@ -109,20 +109,32 @@ def run_rules(text, rules):
 
 
 def test_priority(rules):
-    """同一段文本里三层规则共存，验证抢占顺序 精确 > 模式 > 语义。"""
-    text = ('负责人：宋阳，电话 13800138000，'
-            '主送单位：长江电力、三峡建工，坐标 30.5231, 114.3123')
+    """同一段文本里三层规则共存，验证抢占顺序 精确 > 模式 > 语义。
+
+    精确层的测试词从当前规则里取，不写死——否则词库一改测试就假失败。
+    """
+    exact = [r for r in rules if r['层'] == '精确' and r.get('启用')]
+    parts = ['电话 13800138000', '坐标 30.5231, 114.3123']
+    expect_exact = []
+    for r in exact[:3]:
+        parts.append(r['值'])
+        expect_exact.append(r['占位符'])
+    text = '，'.join(parts) + '。主送单位：长江电力、三峡建工。'
+
     chosen = run_rules(text, rules)
     auto = [(r['占位符'], v) for _, _, r, v in chosen
             if not (r['层'] == '语义' and not r.get('自动替换', True))]
     kinds = [k for k, _ in auto]
-    checks = [
-        ('精确层·人员(宋阳) 命中', '人员' in kinds),
-        ('精确层·组织 命中 >= 2', kinds.count('组织') >= 2),
+
+    checks = [(f'精确层·{p} 命中', p in kinds) for p in expect_exact]
+    checks += [
         ('模式层·手机号 命中', '手机号' in kinds),
         ('模式层·坐标 命中', '坐标' in kinds),
         ('语义层未抢占精确层区间', '单位列表' not in kinds),
     ]
+    if not exact:
+        checks.insert(0, ('精确层为空（词库未配置），跳过精确层检查', True))
+
     print('\n=== 层级优先级测试 ===')
     ok = True
     for label, passed in checks:
@@ -137,6 +149,38 @@ def main():
     for _p in sorted((HERE / '规则').glob('*.json')):
         rules.extend(json.loads(_p.read_text(encoding='utf-8-sig'))['规则'])
     samples = json.loads((HERE / '标注集.json').read_text(encoding='utf-8'))['样本']
+
+    # 词库没配（精确层为空）时，跳过依赖词库的样本，避免必然的"召回失败"
+    exact_types = {r['占位符'] for r in rules if r['层'] == '精确'}
+    if not any(r.get('启用') for r in rules if r['层'] == '精确'):
+        kept, skipped = [], 0
+        for s in samples:
+            if any(t[0] in exact_types for t in s.get('应命中', [])):
+                skipped += 1
+                continue
+            kept.append(s)
+        if skipped:
+            print(f'（词库未配置，跳过 {skipped} 条依赖精确层的样本；配置词库后再跑可测全量）')
+        samples = kept
+
+    # 跳过需要某个具体词条、但词库里没有的样本（避免把"词库没配全"当成规则失败）
+    vocab_words = set()
+    vcsv = HERE / '规则' / '词库.csv'
+    if vcsv.is_file():
+        for line in vcsv.read_text(encoding='utf-8-sig').splitlines():
+            cells = line.split(',')
+            if len(cells) >= 2 and cells[0].strip() != '类别':
+                vocab_words.add(cells[1].strip())
+    kept, missing = [], []
+    for s in samples:
+        need = s.get('需要词')
+        if need and need not in vocab_words:
+            missing.append(need)
+            continue
+        kept.append(s)
+    if missing:
+        print(f'（跳过 {len(missing)} 条：词库缺词 {", ".join(sorted(set(missing)))}；加进词库后可测全量）')
+    samples = kept
 
     stat = {}
     pending = 0
