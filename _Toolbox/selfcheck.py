@@ -95,7 +95,9 @@ def check_history():
     registered = []
     for line in text.splitlines():
         cells = [c.strip() for c in line.split('|')]
-        if len(cells) >= 3 and cells[1] and cells[1] not in ('子目录', ':---'):
+        if (len(cells) >= 3 and cells[1]
+                and cells[1] not in ('子目录', ':---')
+                and '暂无' not in cells[1]):
             registered.append(cells[1])
 
     existing = [d.name for d in out_dir.iterdir() if d.is_dir()] if out_dir.is_dir() else []
@@ -162,11 +164,8 @@ def check_vocab(fix: bool):
     if not csv.is_file():
         warn('没找到 词库.csv')
         return
-    if not js.is_file():
-        warn('没找到 10-精确.json', fixable=True)
-        need = True
-    else:
-        need = csv.stat().st_mtime > js.stat().st_mtime
+    first_time = not js.is_file()
+    need = first_time or csv.stat().st_mtime > js.stat().st_mtime
     if not need:
         ok('词库.csv 与 10-精确.json 同步')
         return
@@ -177,6 +176,8 @@ def check_vocab(fix: bool):
             ok('已自动同步词库')
         else:
             fail('同步失败: ' + (r.stdout or b'').decode('utf-8', 'replace')[:150])
+    elif first_time:
+        warn('词库未初始化（10-精确.json 不存在），加 --fix 可自动生成', fixable=True)
     else:
         warn('词库.csv 有更新但未同步（加 --fix 可自动修）', fixable=True)
 
