@@ -34,7 +34,13 @@ GAP = r'[\s（）()\[\]【】·\-—]{0,2}'
 
 def read_csv(path: Path):
     if not path.is_file():
-        raise SystemExit(f'找不到词库文件: {path}')
+        # 首次使用：从空模板初始化，让发布版开箱可用
+        tpl = path.parent / '词库-空模板.csv'
+        if tpl.is_file():
+            path.write_text(tpl.read_text(encoding='utf-8-sig'), encoding='utf-8-sig')
+            print(f'（首次使用，已从空模板创建 {path.name}）')
+        else:
+            raise SystemExit(f'找不到词库文件: {path}')
     text = None
     for enc in ('utf-8-sig', 'gb18030'):
         try:
