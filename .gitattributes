@@ -1,0 +1,12 @@
+# 统一换行，避免 Windows/Linux 互相拉出满屏 diff
+* text=auto
+
+# cmd/bat 必须是 CRLF，否则 cmd 会把每行拆散
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# 代码和文档统一 LF
+*.py   text eol=lf
+*.md   text eol=lf
+*.json text eol=lf
+*.csv  text eol=lf
