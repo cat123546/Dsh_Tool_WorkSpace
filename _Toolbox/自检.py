@@ -35,7 +35,8 @@ HERE = Path(__file__).resolve().parent          # _Toolbox
 ROOT = HERE.parent                              # 工作区根
 TOOLBOX = HERE
 
-ROOT_ALLOW = {'AGENTS.md', 'README.md', '.gitignore', '.gitattributes', '.git'}
+ROOT_ALLOW = {'AGENTS.md', 'README.md', 'SPEC.md', '使用手册.md',
+              '.gitignore', '.gitattributes', '.git'}
 ROOT_ALLOW_DIRS = {'_scratch', '_Toolbox', '输入资料', '输出结果'}
 
 issues = []
