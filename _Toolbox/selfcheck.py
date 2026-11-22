@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""自检.py — 检查工作区的文档与实际状态是否一致
+"""selfcheck.py — 检查工作区的文档与实际状态是否一致
 
 默认只读，不修改任何文件；加 --fix 才会执行可自动修的项目（目前只有词库同步）。
 
 用法:
-    python 自检.py          只检查
-    python 自检.py --fix    检查并把能修的修掉
+    python selfcheck.py          只检查
+    python selfcheck.py --fix    检查并把能修的修掉
 
 检查项:
     1. INDEX.md 里列的工具，目录和 README 是否存在
@@ -124,7 +124,7 @@ def check_refs():
 def check_help():
     print('\n[4] 工具入口可运行')
     scripts = [p for p in TOOLBOX.rglob('*.py')
-               if p.name not in ('自检.py',) and '测试' not in str(p) and '规则' not in str(p)]
+               if p.name not in ('selfcheck.py',) and '测试' not in str(p) and '规则' not in str(p)]
     if not scripts:
         warn('没有找到可检查的 .py')
         return
