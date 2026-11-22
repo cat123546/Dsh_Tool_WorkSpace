@@ -19,6 +19,7 @@
 """
 
 import argparse
+import hashlib
 import json
 import re
 import subprocess
@@ -38,6 +39,9 @@ TOOLBOX = HERE
 ROOT_ALLOW = {'AGENTS.md', 'README.md', 'SPEC.md', '使用手册.md',
               '.gitignore', '.gitattributes', '.git'}
 ROOT_ALLOW_DIRS = {'_scratch', '_Toolbox', '输入资料', '输出结果'}
+
+# 框架完整性清单（发布端生成，用来发现公共部分被改）
+MANIFEST = TOOLBOX / '框架清单.json'
 
 issues = []
 
@@ -182,9 +186,65 @@ def check_root():
             warn(f'根目录有不该放的文件: {item.name}')
 
 
+def framework_files():
+    """框架文件 = 根目录规则文档 + _Toolbox 全部（清单自身除外）"""
+    items = []
+    for name in ('AGENTS.md', 'README.md'):
+        p = ROOT / name
+        if p.is_file():
+            items.append(p)
+    for p in TOOLBOX.rglob('*'):
+        if p.is_file() and p != MANIFEST:
+            items.append(p)
+    return items
+
+
+def file_hash(p: Path) -> str:
+    h = hashlib.sha256()
+    with p.open('rb') as f:
+        for chunk in iter(lambda: f.read(65536), b''):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def check_integrity(update: bool):
+    print('\n[7] 框架完整性（公共部分有没有被改）')
+    if update:
+        data = {
+            '说明': '框架文件哈希清单。用于发现公共部分被修改；发布端在发布前用 --update-hashes 重新生成。',
+            '文件': {str(p.relative_to(ROOT)).replace('\\', '/'): file_hash(p)
+                     for p in framework_files()},
+        }
+        MANIFEST.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding='utf-8')
+        ok(f'已生成框架清单，共 {len(data["文件"])} 个文件')
+        return
+    if not MANIFEST.is_file():
+        warn('没有框架清单，跳过完整性校验')
+        return
+    try:
+        recorded = json.loads(MANIFEST.read_text(encoding='utf-8')).get('文件', {})
+    except (ValueError, OSError):
+        warn('框架清单损坏，跳过校验')
+        return
+    changed = []
+    for rel, h in recorded.items():
+        p = ROOT / rel
+        if not p.is_file():
+            changed.append(f'{rel}（缺失）')
+        elif file_hash(p) != h:
+            changed.append(rel)
+    if changed:
+        head = '、'.join(changed[:5]) + (' 等' if len(changed) > 5 else '')
+        warn(f'{len(changed)} 个框架文件与发布版不一致: {head}')
+    else:
+        ok(f'{len(recorded)} 个框架文件与发布版一致')
+
+
 def main():
     ap = argparse.ArgumentParser(description='工作区一致性自检（默认只读）')
     ap.add_argument('--fix', action='store_true', help='自动修可修项（目前仅词库同步）')
+    ap.add_argument('--update-hashes', dest='update_hashes', action='store_true',
+                    help='重新生成框架清单（发布端专用，普通用户不要用）')
     args = ap.parse_args()
 
     print('=' * 50)
@@ -197,6 +257,7 @@ def main():
     check_help()
     check_vocab(args.fix)
     check_root()
+    check_integrity(args.update_hashes)
 
     fails = [i for i in issues if i[0] == 'FAIL']
     warns = [i for i in issues if i[0] == 'WARN']
